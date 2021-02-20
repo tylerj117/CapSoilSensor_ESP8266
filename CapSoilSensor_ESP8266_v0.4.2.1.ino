@@ -1,0 +1,399 @@
+#include <PubSubClient.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <SPI.h>
+#include <ArduinoOTA.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+#include <ESP8266HTTPUpdateServer.h>
+#include <ArduinoJson.h>
+
+//Software Version
+#define SOFTWARE_ID "0.4.2.1";
+
+/* v0.4.2.1 release notes:
+    *Converted state payload to JSON
+    *Added JSON Template to MQTT Discovery Config payload
+    *Added MQTT Discovery for additional entities: analog, analog_min, analog_max
+    *Added Device Info for MQTT Discovery
+    *Increased MQTT_MAX_PACKET_SIZE to 1,024 bytes via client.SetBuffer
+    *Standardized version numbers
+*/
+
+/******************************************************************/
+
+String MODEL_ID = "ESP8266";
+String MANUFACTURER_ID = "SummitSystems";
+String MQTT_COMPONENT = "sensor";
+String DEVICE_CLASS = "Moisture";
+
+StaticJsonDocument<1024> pl_config;
+//DynamicJsonDocument pl_config(1024);
+
+//Set MQTT server
+IPAddress mqtt_server(192, 168, 1, 32);
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+//Set WebServer
+ESP8266WebServer httpServer(80);
+
+//Set Strings
+String MAC = String(WiFi.macAddress());
+String mqtt_clientID = MAC;
+
+//Set MQTT topics
+String mqtt_prefix = "home/" + MQTT_COMPONENT + "/" + MAC;
+String mqtt_stat_t = mqtt_prefix + "/state";
+String mqtt_analog_t = mqtt_prefix + "/analog";
+String mqtt_avty_t = mqtt_prefix +
+                     "/status";
+String mqtt_stat_test = "test/json";
+
+//Set MQTT Discovery topics
+String mqtt_prefix_d = "homeassistant/" + MQTT_COMPONENT + "/" + MAC;
+//String mqtt_prefix_d = "test/" + MQTT_COMPONENT + "/" + MAC;
+//String mqtt_dscvy_t = mqtt_prefix_d + "/config";
+
+String mqtt_msg;
+
+/**********************************************************
+**********************************************************/
+
+/**********************************************************/
+
+void setup_wifi() {
+
+  //declare variables
+#define wifi_ssid "EMJ"
+#define wifi_pass "Myla2017"
+
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi sheild not present");
+    while (true); //don't continue
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(wifi_ssid, wifi_pass);
+
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("connected!");
+
+  Serial.print("WiFi Network: ");
+  Serial.print(wifi_ssid);
+  Serial.print("\t");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+
+}
+
+/**********************************************************/
+
+void setup_httpUpdater() {
+
+  //declare variables
+  const char* host = "esp8266-webupdate";
+
+  //WebUpdater
+  ESP8266HTTPUpdateServer httpUpdater;
+
+  MDNS.begin(host);
+
+  httpUpdater.setup(&httpServer);
+  httpServer.begin();
+
+  MDNS.addService("http", "tcp", 80);
+  Serial.printf("HTTPUpdateServer ready! Open http://%s.local/update in your browser\n", host);
+
+}
+
+/**********************************************************/
+
+void setup_OTA() {
+  // Port defaults to 8266
+  // ArduinoOTA.setPort(8266);
+
+  // Hostname defaults to esp8266-[ChipID]
+  //otherwise, setHostname to MAC address
+  ArduinoOTA.setHostname((char*) MAC.c_str());
+
+  // No authentication by default
+  ArduinoOTA.setPassword("02117166");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else { //U_FS
+      type = "filesystem";
+    }
+
+    // NOTE: if updating FS this would be the place to unmount FS using FS.end()
+
+    Serial.println("Begin updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("/lnEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%/r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) {
+      Serial.println("Authorization Failed");
+    } else if (error ==  OTA_BEGIN_ERROR) {
+      Serial.println("Failed to Begin");
+    } else if (error == OTA_CONNECT_ERROR) {
+      Serial.println("Connection Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      Serial.println("Failed to Receive");
+    } else if (error == OTA_END_ERROR) {
+      Serial.println("Failed to End");
+    }
+  });
+  ArduinoOTA.begin();
+  Serial.println("Ready");
+  Serial.println();
+
+}
+
+/**********************************************************/
+
+void mqtt_reconnect() {
+
+  //declare variables
+  //IP Address of server running MQTT Broker (e.g. HomeAssistant)
+  //user and password must match a User created in HomeAssistant
+#define mqtt_user "mqtt"
+#define mqtt_password "mqtt"
+
+  client.setServer(mqtt_server, 1883);
+
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+
+    // Attempt to connect
+    if (client.connect((char*)mqtt_clientID.c_str(), mqtt_user, mqtt_password, (char*)mqtt_avty_t.c_str(), 1, true, "offline")) {
+      Serial.println("connected");
+      client.setBufferSize(1024);
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+/**********************************************************/
+
+void mqttpub_dscvy(char* node) {
+
+  if (!client.connected()) {
+    mqtt_reconnect();
+  } else {
+    ;
+  }
+
+  String mqtt_dscvy_t = mqtt_prefix_d  + "/" + node + "/config";
+  mqtt_dscvy_t.replace(":", "-");
+
+  Serial.println("");
+  Serial.print("Initiating MQTT discovery (-t ");
+  Serial.print(mqtt_dscvy_t + ")...");
+
+  pl_config.clear();
+
+  pl_config["uniq_id"] = MAC + "_" + String(node);
+  pl_config["~"] = mqtt_prefix;
+  pl_config["stat_t"] = "~/state";
+  pl_config["avty_t"] = "~/status";
+  pl_config["name"] = MAC.substring(12) + " " + DEVICE_CLASS + " (" + String(node) + ")";
+  pl_config["ic"] = "mdi:water-percent";
+  pl_config["val_tpl"] = "{{ value_json." + String(node) + "}}";
+
+  mqtt_setDeviceConfig(mqtt_dscvy_t, node);
+}
+
+/**********************************************************/
+
+void mqtt_setDeviceConfig(String config_t, String node) {
+  JsonObject device = pl_config.createNestedObject("dev");
+
+  device["name"] = "Garden Sensor (" + MAC.substring(12) + ")";
+  device["sw"] = SOFTWARE_ID;
+  device["mdl"] = MODEL_ID;
+  device["mf"] = MANUFACTURER_ID;
+  JsonArray identifiers = pl_config["dev"].createNestedArray("ids");
+  identifiers.add(MAC);
+  JsonArray connections = device.createNestedArray("cns");
+  connections.add(serialized("[\"MAC\",\"" + MAC + "\"]"));
+  //connections.add(serialized("[\"ip\",\"" + ipstr + "\"]"));
+
+  char buffer[1024];
+  serializeJsonPretty(pl_config, buffer);
+
+  client.publish("test/newtopic", (char *)config_t.c_str(), true);
+
+  if (client.publish((char *)config_t.c_str(), buffer, true) == true) {
+    Serial.println("...success");
+  } else {
+    Serial.println("...failed...");
+  }
+
+
+}
+/**********************************************************/
+void mqttpub_avty(char* pl_avail) {
+
+  Serial.println("");
+  Serial.print("Publishing ");
+  Serial.print(pl_avail);
+  Serial.print(" to ");
+  Serial.print(mqtt_avty_t);
+  Serial.print("...");
+
+  if (!client.connected()) {
+    mqtt_reconnect();
+  } else {
+    ;
+  }
+
+  if (client.publish((char*) mqtt_avty_t.c_str(), pl_avail, true) == true) {
+    Serial.println("...success");
+  } else {
+    Serial.println("...failed...");
+  }
+}
+
+/**********************************************************/
+
+void setup() {
+  Serial.begin(91024);
+
+  while (!Serial) {
+    ;
+  }
+
+
+  setup_wifi();
+  setup_OTA();
+  setup_httpUpdater();
+  mqtt_reconnect();
+
+  mqttpub_dscvy("percent");
+  mqttpub_dscvy("analog");
+  mqttpub_dscvy("analog_max");
+  mqttpub_dscvy("analog_min");
+  
+  delay(500);
+  mqttpub_avty("online");
+
+}
+
+/**********************************************************/
+
+void loop() {
+
+  ArduinoOTA.handle();
+  httpServer.handleClient();
+  MDNS.update();
+
+  if (!client.connected()) {
+    mqtt_reconnect();
+  }
+  client.loop();
+
+  //declare variables
+  //adjust these to calibrate soil sensor
+  int moistureMax = 857; //to calibrate moistureMax (DRY STATE), analogRead(0) when dry
+  int moistureMin = 471; //to calibrate moistureMin (WET STATE), analogRead(0) when submersed in water
+
+  int analogValue; /// value from ADC
+  int moisturePercent = 0; /// ADC mapped 0 - 100
+
+  long now = millis();
+  long lastMsg = 0;
+
+  if (now - lastMsg > 45000) {
+    lastMsg = now;
+    client.publish("soilsensor2/alive", "stayin' alive");
+    Serial.println("Message Published...");
+  }
+
+  analogValue = analogRead(0);
+  moisturePercent = map(analogValue, moistureMax, moistureMin, 0, 100);
+
+  // Make sure percent stays between 0 and 100
+
+  if (analogValue < 400) {
+    mqtt_msg = "";
+  } else if (moisturePercent > 100) {
+    moisturePercent = 100;
+    mqtt_msg = String(moisturePercent).c_str();
+  } else if (moisturePercent < 0) {
+    moisturePercent = 0;
+    mqtt_msg = String(moisturePercent).c_str();
+  } else {
+    mqtt_msg = String(moisturePercent).c_str();
+  }
+
+  //convert mqtt_topic to const char
+  const char * topic = mqtt_stat_t.c_str();
+  const char * msg = mqtt_msg.c_str();
+  const char * clientID = mqtt_clientID.c_str();
+  const char* topic_analog = mqtt_analog_t.c_str();
+
+  //publish message
+
+  DynamicJsonDocument payload(1024);
+  payload["percent"] = moisturePercent;
+  payload["analog"] = analogValue;
+  payload["analog_max"] = moistureMax;
+  payload["analog_min"] = moistureMin;
+
+  char buffer[1024];
+  serializeJsonPretty(payload, buffer);
+
+  if (client.publish((char*)mqtt_stat_t.c_str(), buffer, true) == true) {
+    Serial.println("...success");
+  } else {
+    Serial.println("...failed...");
+  }
+
+
+  //client.publish(topic, msg, true);
+  //client.publish(topic_analog, String(analogValue).c_str(), true);
+
+  //print topic and published message
+  Serial.print("Analog Value: ");
+  Serial.print(analogValue);
+  Serial.print("\t");
+  Serial.print("Percentage: ");
+  Serial.print(moisturePercent);
+  Serial.print("\t");
+  Serial.print("MQTT Topic: ");
+  Serial.print(topic);
+  Serial.print("\t");
+  Serial.print("MQTT Message: ");
+  Serial.print(msg);
+  Serial.print("\t");
+  Serial.print(WiFi.localIP());
+  Serial.print("\t");
+  Serial.print("Client ID: ");
+  Serial.println(clientID);
+  delay(1000);
+
+}
