@@ -12,7 +12,8 @@
 #define SOFTWARE_ID "0.4.3";
 
 /* v0.4.3 release notes:
-
+  * GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
+  * GOAL: ???
 */
 
 /******************************************************************/
