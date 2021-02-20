@@ -8,12 +8,13 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <ArduinoJson.h>
 
+
 //Software Version
 #define SOFTWARE_ID "0.4.3";
 
 /* v0.4.3 release notes:
   * GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
-  * GOAL: ???
+  * GOAL: Implement WiFi Access Point to connect to any WiFi SSID / PSK
 */
 
 /******************************************************************/
