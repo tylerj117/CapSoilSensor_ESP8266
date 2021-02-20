@@ -95,7 +95,7 @@ void setup_wifi() {
 
 /**********************************************************/
 // NEW NEW NEW
-void setup_wifi();
+void setup_wifi() {
 // NEW NEW NEW
 
   WiFi.mode(WIFI_STA); 
@@ -118,6 +118,8 @@ void setup_wifi();
      Serial.println("failed");
    } else {
      Serial.println("connected!");
+   }
+}
   
 /**********************************************************/
 
