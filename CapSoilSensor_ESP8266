@@ -9,15 +9,10 @@
 #include <ArduinoJson.h>
 
 //Software Version
-#define SOFTWARE_ID "0.4.2.1";
+#define SOFTWARE_ID "0.4.3";
 
-/* v0.4.2.1 release notes:
-    *Converted state payload to JSON
-    *Added JSON Template to MQTT Discovery Config payload
-    *Added MQTT Discovery for additional entities: analog, analog_min, analog_max
-    *Added Device Info for MQTT Discovery
-    *Increased MQTT_MAX_PACKET_SIZE to 1,024 bytes via client.SetBuffer
-    *Standardized version numbers
+/* v0.4.3 release notes:
+
 */
 
 /******************************************************************/
