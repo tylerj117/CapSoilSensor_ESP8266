@@ -11,12 +11,20 @@
 
 
 //Software Version
-#define SOFTWARE_ID "0.4.3";
+#define SOFTWARE_ID "0.4.3.2";
 
 /* v0.4.3 release notes:
   * [ ] GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
   * [X] GOAL: Implement WiFi Access Point to connect to any WiFi SSID / PSK
   * [ ] GOAL: Implement MQTT Broker IP Input on Captive Portal
+*/
+
+/* v0.4.3.2 Notes:
+  * Removed old setup_wifi() loop
+*/
+
+/* v0.4.3.1 Notes:
+  * Added new setup_wifi() loop to enable Captive Portal using <WiFiManager.h> library
 */
 
 /******************************************************************/
@@ -59,45 +67,7 @@ String mqtt_msg;
 /**********************************************************
 **********************************************************/
 
-/**********************************************************
-
-//OLD OLD OLD OLD //
 void setup_wifi() {
-//OLD OLD OLD OLD //
-
-  //declare variables
-#define wifi_ssid "EMJ"
-#define wifi_pass "Myla2017"
-
-  if (WiFi.status() == WL_NO_SHIELD) {
-    Serial.println("WiFi sheild not present");
-    while (true); //don't continue
-  }
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(wifi_ssid, wifi_pass);
-
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("connected!");
-
-  Serial.print("WiFi Network: ");
-  Serial.print(wifi_ssid);
-  Serial.print("\t");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-
-}
-*/
-
-/**********************************************************/
-// NEW NEW NEW
-void setup_wifi() {
-// NEW NEW NEW
 
   WiFi.mode(WIFI_STA); 
   WiFiManager wifiManager; //only requires local initialization
