@@ -14,8 +14,9 @@
 #define SOFTWARE_ID "0.4.3";
 
 /* v0.4.3 release notes:
-  * GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
-  * GOAL: Implement WiFi Access Point to connect to any WiFi SSID / PSK
+  * [ ] GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
+  * [X] GOAL: Implement WiFi Access Point to connect to any WiFi SSID / PSK
+  * [ ] GOAL: Implement MQTT Broker IP Input on Captive Portal
 */
 
 /******************************************************************/
@@ -111,7 +112,7 @@ void setup_wifi() {
    // if empty will auto generate SSID, if password is blank it will be anonymous AP (wm.autoConnect())
    // then goes into a blocking loop awaiting configuration and will return success result
    
-   String AP_NAME = DEVICE_CLASS + MQTT_COMPONENT + MAC.substring(12);
+   String AP_NAME = DEVICE_CLASS + " " + MQTT_COMPONENT + " (" + MAC.substring(12) + ")";
    
    bool res;
    res = wifiManager.autoConnect((char*)AP_NAME.c_str()); //wifiManager.autoConnect("AP-Name","AP-password")
