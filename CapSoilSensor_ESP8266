@@ -111,8 +111,10 @@ void setup_wifi() {
    // if empty will auto generate SSID, if password is blank it will be anonymous AP (wm.autoConnect())
    // then goes into a blocking loop awaiting configuration and will return success result
    
+   String AP_NAME = DEVICE_CLASS + MQTT_COMPONENT + MAC.substring(12);
+   
    bool res;
-   res = wifiManager.autoConnect(MAC.substring(12) + DEVICE_CLASS + MQTT_COMPONENT); //wifiManager.autoConnect("AP-Name","AP-password")
+   res = wifiManager.autoConnect((char*)AP_NAME.c_str()); //wifiManager.autoConnect("AP-Name","AP-password")
   
    if(!res) {
      Serial.println("failed");
