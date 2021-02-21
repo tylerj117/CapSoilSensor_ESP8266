@@ -26,15 +26,15 @@
   * [X] GOAL: Implement MQTT Broker IP Input on Captive Portal
   * [ ] GOAL: Implement Captive Portal on Demand? To change SSID, MQTT Server, Reset WiFi settings, etc.
   * [ ] GOAL: Implement Enable / Disable settings for OTA, WebServer, MQTT Discovery to be adusted via Captive Portal
-  * [/] GOAL: Implement MQTT Port parameter on Captive Portal
-              * NOTES: Parameter added to Captive Portal. Parameter does not update MQTT port connected to yet -TJ 2/21/21
+  * [X] GOAL: Implement MQTT Port parameter on Captive Portal
 */
 
 /* Version Notes
-  * v0.4.3.2 * Removed unneeded variables. Moved variables from Global to local initilization where as able
+  * v0.4.3.2 * Added custom parameter to Captive Portal to set custom MQTT Port
+  * v0.4.3.2 * Removed unnecessary variable (mqtt_stat_t & mqtt_analog_t). String mqtt_stat_t was changed to char and is initialized in loop(). String mqtt_analog_t was no longer necessary due to JSON payload / template. Analog payload now goes to mqtt_stat_T.
   * v0.4.3.2 * Added language to enable / disable options. Added 'ifdef' sections for OTA, WebServer, MQTT Discovery
-  * v0.4.3.2 * Add custom parameter to Captive Portal to set custom MQTT Server & Port
   * v0.4.3.2 * Removed old setup_wifi() loop
+  * v0.4.3.1 * Added custom parameter to Captive Portal to set custom MQTT Server
   * v0.4.3.1 * Added new setup_wifi() loop to enable Captive Portal using <WiFiManager.h> library
 */
 
@@ -64,22 +64,21 @@ DynamicJsonDocument pl_config(1024);
 StaticJsonDocument<1024> pl_config;
 #endif
 
+WiFiClient espClient;
+
 //Set MQTT server
-//IPAddress mqtt_server(192, 168, 1, 32);
+PubSubClient client(espClient);
 int mqtt_port;
 IPAddress mqtt_server;
-WiFiClient espClient;
-PubSubClient client(espClient);
 
 //Set Strings
 String MAC = String(WiFi.macAddress());
 String mqtt_clientID = MAC;
+//char * MAC = (char*)WiFi.macAddress().c_str();
+//char * mqtt_clientID = MAC;
 
 //Set MQTT topics
 String mqtt_prefix = "home/" + MQTT_COMPONENT + "/" + MAC;
-
-//Look at these, do I need them here? Probably not...
-String mqtt_analog_t = mqtt_prefix + "/analog";
 String mqtt_avty_t = mqtt_prefix + "/status";
 
 /**********************************************************
@@ -215,9 +214,9 @@ void mqtt_reconnect() {
 #define mqtt_user "mqtt"
 #define mqtt_password "mqtt"
 
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqtt_server, mqtt_port);
 
-  // Loop until we're reconnected
+  // Loop until we're reconnecteda
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
 
@@ -246,7 +245,6 @@ void mqttpub_dscvy(char* node) {
   }
 
   String mqtt_dscvy_t = "homeassistant/" + MQTT_COMPONENT + "/" + MAC  + "/" + node + "/config";
-  //mqtt_dscvy_t.replace(":", "-");
 
   Serial.println("");
   Serial.print("Initiating MQTT discovery (-t ");
@@ -323,7 +321,7 @@ void setup() {
     ;
   }
 
-  MAC.replace(":", "-");
+  //MAC.replace(":", "-");
   
   setup_wifi();
   mqtt_reconnect();
@@ -394,7 +392,6 @@ void loop() {
   }
 
   const char * clientID = mqtt_clientID.c_str();
-  const char* topic_analog = mqtt_analog_t.c_str();
 
   DynamicJsonDocument payload(1024);
   payload["percent"] = moisturePercent;
