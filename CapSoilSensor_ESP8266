@@ -77,6 +77,9 @@ void setup_wifi() {
   //Use next line to Reset WiFi settings (wipe saved credentials)
   //wifiManager.resetSettings();
   
+  WiFiManagerParameter specified_mqtt_server("server", "mqtt server", "", 40);
+  wifiManager.addParameter(&specified_mqtt_server);
+  
    // Automatically connect using saved credentials,
    // if connection fails, it starts an access point with the specified name ( "AutoConnectAP"),
    // if empty will auto generate SSID, if password is blank it will be anonymous AP (wm.autoConnect())
@@ -92,6 +95,11 @@ void setup_wifi() {
    } else {
      Serial.println("connected!");
    }
+   
+  //convert char value from captive portal to IP address, and set it to mqtt_server
+  const char * portal_MQTTserver = specified_mqtt_server.getValue();
+  mqtt_server.fromString(portal_MQTTserver);
+  
 }
   
 /**********************************************************/
