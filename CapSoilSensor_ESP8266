@@ -1,26 +1,33 @@
 #include <PubSubClient.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
 #include <SPI.h>
-#include <ArduinoOTA.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
-#include <ESP8266HTTPUpdateServer.h>
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 
+/******************************************************************
+ * Enable and Disable Options
+   * To enable, uncomment line
+   * To disable, comment line out */
+   
+#define OTA_enabled //Over-the-Air Updates
+#define HTTPUpdateServer_enabled //HTTP Web Server Update
+#define mqttDiscovery_enabled //MQTT Discovery 
+
+/******************************************************************/
 
 //Software Version
 #define SOFTWARE_ID "0.4.3.2";
 
-/* v0.4.3 release notes:
+/* v0.4.4 release requirement goals:
   * [ ] GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
   * [X] GOAL: Implement WiFi Access Point to connect to any WiFi SSID / PSK
   * [X] GOAL: Implement MQTT Broker IP Input on Captive Portal
   * [ ] GOAL: Implement Captive Portal on Demand? To change SSID, MQTT Server, Reset WiFi settings, etc.
+  * [ ] GOAL: Implement Enable / Disable settings for OTA, WebServer, MQTT Discovery to be adusted via Captive Portal
 */
 
 /* Version Notes
+  * v0.4.3.2 * Added language to enable / disable options. Added 'ifdef' sections for OTA, WebServer, MQTT Discovery
   * v0.4.3.2 * Add custom parameter to Captive Portal to set custom MQTT Server
   * v0.4.3.2 * Removed old setup_wifi() loop
   * v0.4.3.1 * Added new setup_wifi() loop to enable Captive Portal using <WiFiManager.h> library
@@ -33,6 +40,19 @@ String MANUFACTURER_ID = "SummitSystems";
 String MQTT_COMPONENT = "sensor";
 String DEVICE_CLASS = "Moisture";
 
+/******************************************************************/
+
+#ifdef OTA_enabled
+#include <ArduinoOTA.h>
+#endif
+
+#ifdef HTTPUpdateServer_enabled
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+#include <ESP8266HTTPUpdateServer.h>
+ESP8266WebServer httpServer(80);
+#endif
+
 StaticJsonDocument<1024> pl_config;
 //DynamicJsonDocument pl_config(1024);
 
@@ -41,24 +61,19 @@ IPAddress mqtt_server(192, 168, 1, 32);
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-//Set WebServer
-ESP8266WebServer httpServer(80);
-
 //Set Strings
 String MAC = String(WiFi.macAddress());
 String mqtt_clientID = MAC;
 
 //Set MQTT topics
 String mqtt_prefix = "home/" + MQTT_COMPONENT + "/" + MAC;
+
+//Look at these, do I need them here? Probably not...
 String mqtt_stat_t = mqtt_prefix + "/state";
 String mqtt_analog_t = mqtt_prefix + "/analog";
 String mqtt_avty_t = mqtt_prefix + "/status";
 
-//Set MQTT Discovery topics
-String mqtt_prefix_d = "homeassistant/" + MQTT_COMPONENT + "/" + MAC;
-//String mqtt_prefix_d = "test/" + MQTT_COMPONENT + "/" + MAC;
-//String mqtt_dscvy_t = mqtt_prefix_d + "/config";
-
+//What about this rando?
 String mqtt_msg;
 
 /**********************************************************
@@ -214,8 +229,8 @@ void mqttpub_dscvy(char* node) {
     ;
   }
 
-  String mqtt_dscvy_t = mqtt_prefix_d  + "/" + node + "/config";
-  mqtt_dscvy_t.replace(":", "-");
+  String mqtt_dscvy_t = "homeassistant/" + MQTT_COMPONENT + "/" + MAC  + "/" + node + "/config";
+  //mqtt_dscvy_t.replace(":", "-");
 
   Serial.println("");
   Serial.print("Initiating MQTT discovery (-t ");
@@ -246,13 +261,11 @@ void mqtt_setDeviceConfig(String config_t, String node) {
   JsonArray identifiers = pl_config["dev"].createNestedArray("ids");
   identifiers.add(MAC);
   JsonArray connections = device.createNestedArray("cns");
-  connections.add(serialized("[\"MAC\",\"" + MAC + "\"]"));
+  connections.add(serialized("[\"MAC\",\"" + WiFi.macAddress() + "\"]"));
   //connections.add(serialized("[\"ip\",\"" + ipstr + "\"]"));
 
   char buffer[1024];
   serializeJsonPretty(pl_config, buffer);
-
-  client.publish("test/newtopic", (char *)config_t.c_str(), true);
 
   if (client.publish((char *)config_t.c_str(), buffer, true) == true) {
     Serial.println("...success");
@@ -294,16 +307,25 @@ void setup() {
     ;
   }
 
-
+  MAC.replace(":", "-");
+  
   setup_wifi();
-  setup_OTA();
-  setup_httpUpdater();
   mqtt_reconnect();
 
+#ifdef OTA_enabled
+  setup_OTA();
+#endif
+
+#ifdef HTTPUpdateServer_enabled
+  setup_httpUpdater();
+#endif
+
+#ifdef MQTTDiscovery_enabled
   mqttpub_dscvy("percent");
   mqttpub_dscvy("analog");
   mqttpub_dscvy("analog_max");
   mqttpub_dscvy("analog_min");
+#endif
   
   delay(500);
   mqttpub_avty("online");
@@ -363,8 +385,6 @@ void loop() {
   const char * clientID = mqtt_clientID.c_str();
   const char* topic_analog = mqtt_analog_t.c_str();
 
-  //publish message
-
   DynamicJsonDocument payload(1024);
   payload["percent"] = moisturePercent;
   payload["analog"] = analogValue;
@@ -374,15 +394,12 @@ void loop() {
   char buffer[1024];
   serializeJsonPretty(payload, buffer);
 
+  //Publish payload to topic. Print if failed or succeeded)
   if (client.publish((char*)mqtt_stat_t.c_str(), buffer, true) == true) {
     Serial.println("...success");
   } else {
     Serial.println("...failed...");
   }
-
-
-  //client.publish(topic, msg, true);
-  //client.publish(topic_analog, String(analogValue).c_str(), true);
 
   //print topic and published message
   Serial.print("Analog Value: ");
