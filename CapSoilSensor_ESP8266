@@ -16,11 +16,12 @@
 /* v0.4.3 release notes:
   * [ ] GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
   * [X] GOAL: Implement WiFi Access Point to connect to any WiFi SSID / PSK
-  * [ ] GOAL: Implement MQTT Broker IP Input on Captive Portal
+  * [X] GOAL: Implement MQTT Broker IP Input on Captive Portal
 */
 
 /* v0.4.3.2 Notes:
   * Removed old setup_wifi() loop
+  * Add custom parameter to Captive Portal to set custom MQTT Server
 */
 
 /* v0.4.3.1 Notes:
@@ -77,7 +78,7 @@ void setup_wifi() {
   //Use next line to Reset WiFi settings (wipe saved credentials)
   //wifiManager.resetSettings();
   
-  WiFiManagerParameter specified_mqtt_server("server", "mqtt server", "", 40);
+  WiFiManagerParameter specified_mqtt_server("server", "MQTT Host IP:", "192.168.1.???", 20);
   wifiManager.addParameter(&specified_mqtt_server);
   
    // Automatically connect using saved credentials,
