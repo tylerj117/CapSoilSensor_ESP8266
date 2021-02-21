@@ -54,9 +54,7 @@ String mqtt_clientID = MAC;
 String mqtt_prefix = "home/" + MQTT_COMPONENT + "/" + MAC;
 String mqtt_stat_t = mqtt_prefix + "/state";
 String mqtt_analog_t = mqtt_prefix + "/analog";
-String mqtt_avty_t = mqtt_prefix +
-                     "/status";
-String mqtt_stat_test = "test/json";
+String mqtt_avty_t = mqtt_prefix + "/status";
 
 //Set MQTT Discovery topics
 String mqtt_prefix_d = "homeassistant/" + MQTT_COMPONENT + "/" + MAC;
@@ -78,7 +76,7 @@ void setup_wifi() {
   //Use next line to Reset WiFi settings (wipe saved credentials)
   //wifiManager.resetSettings();
   
-  WiFiManagerParameter specified_mqtt_server("server", "MQTT Host IP:", "192.168.1.???", 20);
+  WiFiManagerParameter specified_mqtt_server("server", "MQTT Host IP", "192.168.1.???", 20);
   wifiManager.addParameter(&specified_mqtt_server);
   
    // Automatically connect using saved credentials,
