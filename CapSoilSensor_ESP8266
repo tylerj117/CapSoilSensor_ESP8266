@@ -125,15 +125,7 @@ void setup_wifi() {
    } else {
      Serial.println("connected!");
    }
-   
-  /*convert char value from captive portal to IP address, and set it to mqtt_server
-  const char * portal_MQTTserver = specified_mqtt_server.getValue();
-  const char* portal_MQTTport = specified_mqtt_port.getValue();
-  
-  mqtt_server.fromString(portal_MQTTserver);  
-  //mqtt_port = (int)portal_MQTTport;
-  */
-  
+ 
   mqtt_server.fromString(specified_mqtt_server.getValue());
   mqtt_port = (int)specified_mqtt_port.getValue();
 }
