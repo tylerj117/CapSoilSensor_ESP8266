@@ -9,26 +9,31 @@
    * To enable, uncomment line
    * To disable, comment line out */
    
-#define OTA_enabled //Over-the-Air Updates
-#define HTTPUpdateServer_enabled //HTTP Web Server Update
-#define mqttDiscovery_enabled //MQTT Discovery 
+#define OTA_enabled //default: enabled
+#define HTTPUpdateServer_enabled //default: enabled
+#define mqttDiscovery_enabled //default: enabled
+//#define DynamicJSON_enabled //default: DISabled
+//#define ForgetKnownNetworks_enabled //default: enabled // Uncomment to reset WiFi settings & delete known networks
 
 /******************************************************************/
 
 //Software Version
 #define SOFTWARE_ID "0.4.3.2";
 
-/* v0.4.4 release requirement goals:
+/* v0.4.4 Release Requirement Goals:
   * [ ] GOAL: Implement MQTT Callback to adjust sensor calibration via HomeAssistant
   * [X] GOAL: Implement WiFi Access Point to connect to any WiFi SSID / PSK
   * [X] GOAL: Implement MQTT Broker IP Input on Captive Portal
   * [ ] GOAL: Implement Captive Portal on Demand? To change SSID, MQTT Server, Reset WiFi settings, etc.
   * [ ] GOAL: Implement Enable / Disable settings for OTA, WebServer, MQTT Discovery to be adusted via Captive Portal
+  * [/] GOAL: Implement MQTT Port parameter on Captive Portal
+              * NOTES: Parameter added to Captive Portal. Parameter does not update MQTT port connected to yet -TJ 2/21/21
 */
 
 /* Version Notes
+  * v0.4.3.2 * Removed unneeded variables. Moved variables from Global to local initilization where as able
   * v0.4.3.2 * Added language to enable / disable options. Added 'ifdef' sections for OTA, WebServer, MQTT Discovery
-  * v0.4.3.2 * Add custom parameter to Captive Portal to set custom MQTT Server
+  * v0.4.3.2 * Add custom parameter to Captive Portal to set custom MQTT Server & Port
   * v0.4.3.2 * Removed old setup_wifi() loop
   * v0.4.3.1 * Added new setup_wifi() loop to enable Captive Portal using <WiFiManager.h> library
 */
@@ -53,8 +58,11 @@ String DEVICE_CLASS = "Moisture";
 ESP8266WebServer httpServer(80);
 #endif
 
+#ifdef DynamicJSON_enabled
+DynamicJsonDocument pl_config(1024);
+#else
 StaticJsonDocument<1024> pl_config;
-//DynamicJsonDocument pl_config(1024);
+#endif
 
 //Set MQTT server
 IPAddress mqtt_server(192, 168, 1, 32);
@@ -69,28 +77,36 @@ String mqtt_clientID = MAC;
 String mqtt_prefix = "home/" + MQTT_COMPONENT + "/" + MAC;
 
 //Look at these, do I need them here? Probably not...
-String mqtt_stat_t = mqtt_prefix + "/state";
 String mqtt_analog_t = mqtt_prefix + "/analog";
 String mqtt_avty_t = mqtt_prefix + "/status";
-
-//What about this rando?
-String mqtt_msg;
 
 /**********************************************************
 **********************************************************/
 
 void setup_wifi() {
-
+  Serial.print("Attempting to connect to WiFi...");
+  
   WiFi.mode(WIFI_STA); 
   WiFiManager wifiManager; //only requires local initialization
   
-  Serial.print("Attempting to connect to WiFi...");
+  wifiManager.setCountry("US");
+  //wifiManager.setDarkMode(true);
+  wifiManager.setClass("invert");
   
-  //Use next line to Reset WiFi settings (wipe saved credentials)
-  //wifiManager.resetSettings();
+  //This resets WiFi settings (wipe saved credentials). Uncomment '#define ForgetKnownNetworks_enabled' to enable
+  #ifdef ForgetKnownNetworks_enabled
+  wifiManager.resetSettings();
+  #endif
   
+  //define custom Captive Portal Parameters
   WiFiManagerParameter specified_mqtt_server("server", "MQTT Host IP", "192.168.1.???", 20);
+  WiFiManagerParameter specified_mqtt_port("port", "MQTT Port", "1883", 6);
+  WiFiManagerParameter test_ip_param("test_param", "Test IP param", "", 15, "pattern='\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}'"); // custom input attrs (ip mask)
+  
+  //add custom Captive Portal Parameters  
   wifiManager.addParameter(&specified_mqtt_server);
+  wifiManager.addParameter(&specified_mqtt_port);
+  wifiManager.addParameter(&test_ip_param);
   
    // Automatically connect using saved credentials,
    // if connection fails, it starts an access point with the specified name ( "AutoConnectAP"),
@@ -110,8 +126,7 @@ void setup_wifi() {
    
   //convert char value from captive portal to IP address, and set it to mqtt_server
   const char * portal_MQTTserver = specified_mqtt_server.getValue();
-  mqtt_server.fromString(portal_MQTTserver);
-  
+  mqtt_server.fromString(portal_MQTTserver);  
 }
   
 /**********************************************************/
@@ -368,20 +383,15 @@ void loop() {
   // Make sure percent stays between 0 and 100
 
   if (analogValue < 400) {
-    mqtt_msg = "";
+    ;
   } else if (moisturePercent > 100) {
     moisturePercent = 100;
-    mqtt_msg = String(moisturePercent).c_str();
   } else if (moisturePercent < 0) {
     moisturePercent = 0;
-    mqtt_msg = String(moisturePercent).c_str();
   } else {
-    mqtt_msg = String(moisturePercent).c_str();
+    ;
   }
 
-  //convert mqtt_topic to const char
-  const char * topic = mqtt_stat_t.c_str();
-  const char * msg = mqtt_msg.c_str();
   const char * clientID = mqtt_clientID.c_str();
   const char* topic_analog = mqtt_analog_t.c_str();
 
@@ -391,11 +401,20 @@ void loop() {
   payload["analog_max"] = moistureMax;
   payload["analog_min"] = moistureMin;
 
-  char buffer[1024];
-  serializeJsonPretty(payload, buffer);
 
+  char bufferPretty[1024];
+  serializeJsonPretty(payload, bufferPretty);
+  
+  char buffer[1024];
+  serializeJson(payload, buffer);
+
+  //create char* State Topicf
+  char mqtt_stat_t[200];
+  strcpy (mqtt_stat_t, (char*)mqtt_prefix.c_str());
+  strcat (mqtt_stat_t, "/state");
+  
   //Publish payload to topic. Print if failed or succeeded)
-  if (client.publish((char*)mqtt_stat_t.c_str(), buffer, true) == true) {
+  if (client.publish(mqtt_stat_t, bufferPretty, true) == true) {
     Serial.println("...success");
   } else {
     Serial.println("...failed...");
@@ -409,10 +428,10 @@ void loop() {
   Serial.print(moisturePercent);
   Serial.print("\t");
   Serial.print("MQTT Topic: ");
-  Serial.print(topic);
+  Serial.print(mqtt_stat_t);
   Serial.print("\t");
   Serial.print("MQTT Message: ");
-  Serial.print(msg);
+  Serial.print(buffer);
   Serial.print("\t");
   Serial.print(WiFi.localIP());
   Serial.print("\t");
