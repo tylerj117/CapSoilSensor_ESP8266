@@ -13,7 +13,7 @@
 #define HTTPUpdateServer_enabled //default: enabled
 #define mqttDiscovery_enabled //default: enabled
 //#define DynamicJSON_enabled //default: DISabled
-#define ForgetKnownNetworks_enabled //default: enabled // Uncomment to reset WiFi settings & delete known networks
+//#define ForgetKnownNetworks_enabled //default: enabled // Uncomment to reset WiFi settings & delete known networks
 
 /******************************************************************/
 
@@ -214,8 +214,9 @@ void mqtt_reconnect() {
 #define mqtt_user "mqtt"
 #define mqtt_password "mqtt"
 
-  client.setServer(mqtt_server, mqtt_port);
-
+  //client.setServer(mqtt_server, mqtt_port);
+  client.setServer(mqtt_server, 1883);
+  
   // Loop until we're reconnecteda
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
